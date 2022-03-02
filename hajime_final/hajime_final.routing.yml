@@ -1,0 +1,7 @@
+hajime.final:
+  path: '/hajime/form'
+  defaults:
+    _title: 'Form'
+    _form: '\Drupal\hajime_final\Form\FormTableInput'
+  requirements:
+    _permission: 'access content'

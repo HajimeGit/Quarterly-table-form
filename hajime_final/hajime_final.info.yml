@@ -1,0 +1,6 @@
+name: hajime_final
+description: Provides form for accounting information.
+package: Custom
+
+type: module
+core_version_requirement: ^8 || ^9
