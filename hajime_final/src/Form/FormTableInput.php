@@ -21,6 +21,11 @@ class FormTableInput extends FormBase {
   }
 
   /**
+   * Default table count.
+   */
+  protected const DEFAULT_TABLE_COUNT = 1;
+
+  /**
    * Initial number of tables.
    *
    * @var int
@@ -55,7 +60,7 @@ class FormTableInput extends FormBase {
       'May' => $this->t('May'),
       'June' => $this->t('Jun'),
       'Q2' => $this->t('Q2'),
-      'Jul' => $this->t('July'),
+      'July' => $this->t('July'),
       'August' => $this->t('Aug'),
       'September' => $this->t('Sep'),
       'Q3' => $this->t('Q3'),
@@ -204,67 +209,57 @@ class FormTableInput extends FormBase {
    * {@inheritDoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
-    // Getting array with inactive cells.
-    $inactive_cell = $this->inactiveStrings();
     // Start and end points for validation loops.
     $start_point = NULL;
     $end_point = NULL;
-    // An array, which store values from each table.
-    $each_table_values = [];
-    // An array, which store all tables with cell values.
-    $tables_cell_values = [];
+    $first_table = [];
     // Main loop for each table.
     for ($i = 1; $i <= $this->tables; $i++) {
-      // Getting values using the form_state method.
-      $values_from_state = $form_state->getValue('table-' . $i);
-      // Getting values of each table from previous array.
-      foreach ($values_from_state as $row_values) {
-        // Writing each result like name and value for cell.
-        foreach ($row_values as $cell_name => $cell_values) {
-          // Availability check for disabled headers.
-          if (!array_key_exists($cell_name, $inactive_cell)) {
-            // Saving all tables with cell values.
-            $tables_cell_values['table-' . $i][] = $cell_values;
+      $picked = FALSE;
+      $table_values = [];
+      foreach ($form_state->getValue('table-' . $i) as $row) {
+        $row = array_diff_key($row, $this->inactiveStrings());
+        foreach ($row as $value) {
+          $table_values[] = $value;
+          // Save values of first table.
+          if ($i === self::DEFAULT_TABLE_COUNT) {
+            $first_table[] = $value;
           }
         }
       }
-      // Saving values from each table.
-      foreach ($tables_cell_values as $each_cell_values) {
-        $each_table_values = $each_cell_values;
-      }
-
       // Validation for differences in tables and getting start point.
-      foreach ($each_table_values as $key => $value) {
-        for ($cell_key = 0; $cell_key < count($each_table_values); $cell_key++) {
-          if (empty($tables_cell_values['table-1'][$cell_key]) !== empty($tables_cell_values['table-' . $i][$cell_key])) {
-            $form_state->setErrorByName('table-' . $i, 'Tables are different!');
+      foreach ($table_values as $key => $value) {
+        if ($i !== self::DEFAULT_TABLE_COUNT && !$picked) {
+          foreach ($table_values as $k => $v) {
+            if (empty($first_table[$k]) !== empty($table_values[$k])) {
+              $form_state->setErrorByName("table-$i", $this->t('Tables are different!'));
+            }
           }
+          $picked = TRUE;
         }
         // If cell has not empty value, purpose value of key for start point.
-        if (!empty($value) || $value == '0') {
+        if (!empty($value) || $value === '0') {
           $start_point = $key;
           break;
         }
       }
 
       // If start point has value, which is not equal to null, run the loop.
-      if ($start_point !== NULL) {
+      if (isset($start_point)) {
         // Checking all completed cells after start point.
-        for ($completed_cells = $start_point; $completed_cells < count($each_table_values); $completed_cells++) {
-          // If completed value is empty, purpose for the cell end point value.
-          if (($each_table_values[$completed_cells] == NULL)) {
-            $end_point = $completed_cells;
+        foreach ($this->tableArraySlice($table_values, $start_point) as $key => $value) {
+          if ($value == NULL) {
+            $end_point = $key;
             break;
           }
         }
       }
 
       // If end point has value, which is not equal to null, run the loop.
-      if ($end_point !== NULL) {
+      if (isset($start_point)) {
         // Checking completed cells after end point.
-        for ($empty_cells = $end_point; $empty_cells < count($each_table_values); $empty_cells++) {
-          // If value of the cell is not equal to null, show message with error.
-          if (($each_table_values[$empty_cells]) != NULL) {
+        foreach ($this->tableArraySlice($table_values, $end_point) as $value) {
+          if ($value != NULL) {
             $form_state->setErrorByName("table-$i", $this->t('Invalid'));
           }
         }
@@ -280,24 +275,41 @@ class FormTableInput extends FormBase {
     for ($i = 0; $i <= $this->tables; $i++) {
       // Getting values of table.
       $table_result = $form_state->getValue('table-' . $i);
-      foreach ($table_result as $key => $value) {
-        $table_number = 'table-' . ($i);
-        // Operations with cell values.
-        $q1 = (($value['January'] + $value['February'] + $value['March']) + 1) / 3;
-        $q2 = (($value['April'] + $value['May'] + $value['June']) + 1) / 3;
-        $q3 = (($value['July'] + $value['August'] + $value['September']) + 1) / 3;
-        $q4 = (($value['October'] + $value['November'] + $value['December']) + 1) / 3;
-        $ytd = (($q1 + $q2 + $q3 + $q4) + 1) / 4;
-        // Set values for inactive cells.
-        $form_state->setValue([$table_number, $key, 'Q1'], $q1);
-        $form_state->setValue([$table_number, $key, 'Q2'], $q2);
-        $form_state->setValue([$table_number, $key, 'Q3'], $q3);
-        $form_state->setValue([$table_number, $key, 'Q4'], $q4);
-        $form_state->setValue([$table_number, $key, 'YTD'], $ytd);
+      if ($table_result) {
+        foreach ($table_result as $key => $value) {
+          $table_number = 'table-' . ($i);
+          // Operations with cell values.
+          $q1 = (((int) $value['January'] + (int) $value['February'] + (int) $value['March']) + 1) / 3;
+          $q2 = (((int) $value['April'] + (int) $value['May'] + (int) $value['June']) + 1) / 3;
+          $q3 = (((int) $value['July'] + (int) $value['August'] + (int) $value['September']) + 1) / 3;
+          $q4 = (((int) $value['October'] + (int) $value['November'] + (int) $value['December']) + 1) / 3;
+          $ytd = (($q1 + $q2 + $q3 + $q4) + 1) / 4;
+          // Set values for inactive cells.
+          $form_state->setValue([$table_number, $key, 'Q1'], $q1);
+          $form_state->setValue([$table_number, $key, 'Q2'], $q2);
+          $form_state->setValue([$table_number, $key, 'Q3'], $q3);
+          $form_state->setValue([$table_number, $key, 'Q4'], $q4);
+          $form_state->setValue([$table_number, $key, 'YTD'], $ytd);
+        }
       }
     }
     $form_state->setRebuild();
     $this->messenger()->addStatus('Valid');
+  }
+
+  /**
+   * Slice array with specific parameters.
+   *
+   * @param array $values
+   *   Array with values.
+   *
+   * @param $point
+   *   Offset point.
+   *
+   * @return array
+   */
+  public function tableArraySlice(array $values, $point): array {
+    return array_slice($values, (int) $point + 1, NULL, TRUE);
   }
 
 }
