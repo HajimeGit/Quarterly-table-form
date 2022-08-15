@@ -206,6 +206,23 @@ class FormTableInput extends FormBase {
   }
 
   /**
+   * Get values from each row in table.
+   *
+   * @param array $rows
+   *   Rows in table.
+   */
+  public function getValuesFromRow(array $rows): array {
+    $table_values = [];
+    foreach ($rows as $row) {
+      $row = array_diff_key($row, $this->inactiveStrings());
+      foreach ($row as $value) {
+        $table_values[] = $value;
+      }
+    }
+    return $table_values;
+  }
+
+  /**
    * {@inheritDoc}
    */
   public function validateForm(array &$form, FormStateInterface $form_state) {
@@ -216,17 +233,11 @@ class FormTableInput extends FormBase {
     // Main loop for each table.
     for ($i = 1; $i <= $this->tables; $i++) {
       $picked = FALSE;
-      $table_values = [];
-      foreach ($form_state->getValue('table-' . $i) as $row) {
-        $row = array_diff_key($row, $this->inactiveStrings());
-        foreach ($row as $value) {
-          $table_values[] = $value;
-          // Save values of first table.
-          if ($i === self::DEFAULT_TABLE_COUNT) {
-            $first_table[] = $value;
-          }
-        }
+      $table_values = $this->getValuesFromRow($form_state->getValue('table-' . $i));
+      if ($i === self::DEFAULT_TABLE_COUNT) {
+        $first_table = $table_values;
       }
+
       // Validation for differences in tables and getting start point.
       foreach ($table_values as $key => $value) {
         if ($i !== self::DEFAULT_TABLE_COUNT && !$picked) {
